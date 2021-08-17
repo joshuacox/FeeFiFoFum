@@ -1,0 +1,197 @@
+#!/bin/bash
+#set -eux
+set -eu
+TMP=$(mktemp -d)
+echo "$TMP"
+#trap "rm -rvf $TMP $INIT_TARGET" EXIT
+#trap "rm -rvf $TMP" EXIT
+
+rm_target () {
+  RM_TARGET=$1
+  if [[ -f $RM_TARGET ]]; then
+    rm -f $RM_TARGET
+  else
+    echo "$RM_TARGET is not a file, bailing out!"
+    exit 1
+  fi
+}
+
+helper () {
+  echo 'Give me a path to a targetfile, that I can create and use to test with.'
+  echo 'This file should not exist, but this should be a path I can write to'
+  echo 'e.g.'
+  echo "$0 /mnt/target/testfile" 
+}
+
+if [[ -z $1 ]]; then
+  helper
+fi
+
+if [[ -x "/usr/bin/time" ]]; then
+  TIME=/usr/bin/time
+else
+  TIME=time
+fi
+
+initializer () {
+  if [[ -z $1 ]]; then
+    echo 'no INIT_TARGET :('
+    exit 1
+  else
+    INIT_TARGET=$1
+  fi
+  if [[ -f $INIT_TARGET ]]; then
+    echo "target already present bailing out"
+    exit 1
+  else
+    touch $INIT_TARGET
+  fi
+}
+
+df_json () {
+	df -Ph | \
+		jq -R -s '
+			[
+				split("\n") |
+				.[] |
+				if test("^/") then
+					gsub(" +"; " ") | split(" ") | {filesytem: .[0], spacetotal: .[1], spaceused: .[2], spaceavail: .[3], percentused: .[4], mountpoint: .[5]}
+				else
+					empty
+				end
+			]'|sed 's/\]/],/' 
+}
+
+chomp () {
+  tr -d '\n'
+}
+
+base_tests () {
+  if [[ -z $1 ]]; then
+    echo 'no BASE_TARGET :('
+    exit 1
+  else
+    BASE_TARGET=$1
+  fi
+  echo "First fire 32 million zeros at $BASE_TARGET"
+  printf '{\n' 1>>$TMP/base.json 2>>$TMP/base.err 
+  # hostname
+  printf '  "hostname" : "' 1>>$TMP/base.json
+  hostname | chomp 1>>$TMP/base.json 2>>$TMP/base.err 
+  printf '",\n' 1>>$TMP/base.json
+  # date
+  printf '  "date" : "' 1>>$TMP/base.json
+  date +%Y-%m-%d-%H-%M-%S | chomp  1>>$TMP/base.json 2>>$TMP/base.err 
+  printf '",\n' 1>>$TMP/base.json
+  printf '  "timestamp" : "' 1>>$TMP/base.json
+  date +%s | chomp  1>>$TMP/base.json 2>>$TMP/base.err 
+  printf '",\n' 1>>$TMP/base.json
+  # uname
+  printf '  "uname" : "' 1>>$TMP/base.json
+  uname -a | chomp  1>>$TMP/base.json 2>>$TMP/base.err 
+  printf '",\n' 1>>$TMP/base.json
+  # df
+  printf '  "df" : ' 1>>$TMP/base.json
+  df_json 1>>$TMP/base.json 2>>$TMP/base.err 
+  printf '\n' 1>>$TMP/base.json
+  # dd32M
+  printf '  "dd32M" : ' 1>>$TMP/base.json
+  echo 'bytes,time,rate' > $TMP/dd32M.csv
+  sudo dd if=/dev/zero of=$BASE_TARGET bs=32M count=1 2>&1 |grep bytes|sed 's/bytes .* copied,/,/' >>  $TMP/dd32M.csv
+  jq -R -s -f csv2json.jq $TMP/dd32M.csv 1>>$TMP/base.json 2>>$TMP/base.err 
+  printf '}\n' 1>>$TMP/base.json 2>>$TMP/base.err 
+  rm_target $BASE_TARGET
+}
+
+sender () {
+  SENDTARGET=$1
+  cat $SENDTARGET
+}
+
+fioer () {
+  if [[ -z $1 ]]; then
+    echo 'no THIS :('
+    exit 1
+  else
+    THIS=$1
+    shift;
+  fi
+  if [[ -z $1 ]]; then
+    echo 'no THIS_TARGET :('
+    exit 1
+  else
+    THIS_TARGET=$1
+    shift;
+  fi
+  #echo "Starting $THIS on $THIS_TARGET"
+  FIOTMP=$TMP/fiotmp-$THIS
+  mkdir -p $FIOTMP
+
+  REPLACEME_filename_REPLACEME=${THIS_TARGET} \
+  envsubst < tpl/${THIS}.tpl \
+    > $FIOTMP/${THIS}.fio
+  $TIME sudo fio \
+    --output=$FIOTMP/${THIS}_output.json \
+    --output-format=json+ \
+    $FIOTMP/${THIS}.fio
+  #sender $FIOTMP/${THIS}_output.json
+  mv -v $FIOTMP/${THIS}_output.json $TMP/
+  #sudo rm -v $FIOTMP/${THIS}_output.json
+  rm -v $FIOTMP/${THIS}.fio
+  #rm -Rfv $FIOTMP
+  rmdir -v $FIOTMP
+}
+
+main () {
+  if [[ -z $1 ]]; then
+    echo 'no MAIN_TARGET :('
+    exit 1
+  else
+    MAIN_TARGET=$1
+  fi
+  echo "Initializer"
+  initializer $MAIN_TARGET 1>$TMP/init.log 2>$TMP/init.err 
+  echo "Base Tests"
+  base_tests $MAIN_TARGET
+  echo "fio reads"
+  fioer fiorandomreadlatency $MAIN_TARGET 1>$TMP/fiorandomreadlatency.log 2>$TMP/fiorandomreadlatency.err 
+  echo "fio rw"
+  fioer fiorandomrwlatency $MAIN_TARGET 1>$TMP/fiorandomrwlatency.log 2>$TMP/fiorandomrwlatency.err 
+  rm_target $MAIN_TARGET
+  jq -n '[ inputs[] ]' $TMP/*.json  > $TMP/final.json
+  jq . $TMP/final.json
+}
+
+looper () {
+for item in "$@" ; do
+    #process item
+
+  if [[ -z $item ]]; then
+    echo 'no target :('
+    helper
+    exit 1
+  elif [[ $item == 'help' || $item == '-h' || $item == '--help' ]]; then
+    helper
+    exit 1
+  else
+    touch $item
+    if [[ $? -eq '0' ]]; then
+      rm $item
+    else
+      echo "Failed cannot create $item"
+      exit 1
+    fi
+  fi
+  if [[ $item == '/' ]]; then
+    echo 'Do not target root!'
+    exit 1
+  else
+    shift;
+    main $item
+  fi
+done
+}
+
+looper $@
+echo "$TMP"
+ls -alh "$TMP"
