@@ -5,6 +5,7 @@ TMP=$(mktemp -d)
 echo "$TMP"
 #trap "rm -rvf $TMP $INIT_TARGET" EXIT
 #trap "rm -rvf $TMP" EXIT
+: ${FIO_OUTPUT_FORMAT:='json'}
 
 rm_target () {
   RM_TARGET=$1
@@ -132,7 +133,7 @@ fioer () {
     > $FIOTMP/${THIS}.fio
   $TIME sudo fio \
     --output=$FIOTMP/${THIS}_output.json \
-    --output-format=json+ \
+    --output-format=$FIO_OUTPUT_FORMAT \
     $FIOTMP/${THIS}.fio
   #sender $FIOTMP/${THIS}_output.json
   mv -v $FIOTMP/${THIS}_output.json $TMP/
@@ -193,5 +194,6 @@ done
 }
 
 looper $@
+cp test*js $TMP/
 echo "$TMP"
-ls -alh "$TMP"
+#ls -alh "$TMP"
