@@ -17,6 +17,7 @@ set -eu
 THIS_CWD=$(pwd)
 TMP=$(mktemp -d)
 
+# prep the temp dir
 echo '# Taken from https://github.com/stedolan/jq/wiki/Cookbook#convert-a-csv-file-with-headers-to-json
 # COPYING --> https://github.com/stedolan/jq/blob/master/COPYING
 # objectify/1 takes an array of string values as inputs, converts
@@ -40,6 +41,14 @@ def csv2json:
       ( []; . + [ $row|objectify($headers) ]);
 
 csv2json' > $TMP/csv2json.jq 
+
+# Start of merge js
+cat << EOF > $TMP/merge.js
+'use strict';
+const fs = require('fs');
+let rawdata = fs.readFileSync('${TMP}/base.json');
+let base = JSON.parse(rawdata);
+EOF
 
 horizontal_rule () {
   # make a horizontal rule in the terminal to separate blocks of text
@@ -114,7 +123,7 @@ df_json () {
 				split("\n") |
 				.[] |
 				if test("^/") then
-					gsub(" +"; " ") | split(" ") | {filesytem: .[0], spacetotal: .[1], spaceused: .[2], spaceavail: .[3], percentused: .[4], mountpoint: .[5]}
+					gsub(" +"; " ") | split(" ") | {filesytem: .[0], totalSpace: .[1], usedSpace: .[2], availableSpace: .[3], percentUsed: .[4], mount: .[5]}
 				else
 					empty
 				end
@@ -206,7 +215,17 @@ fioer () {
     --output-format=$FIO_OUTPUT_FORMAT \
     $FIOTMP/${THIS}.fio
   #sender $FIOTMP/${THIS}_output.json
+  sed -i 's/fio: double CPU clock wrap//' $FIOTMP/${THIS}_output.json
   mv -v $FIOTMP/${THIS}_output.json $TMP/
+
+# break WS
+# to add lines to merge js
+cat << EOF >> ${TMP}/merge.js
+let ${THIS} = fs.readFileSync('${TMP}/${THIS}_output.json');
+base.${THIS} = JSON.parse(${THIS});
+EOF
+# END break WS
+
   #sudo rm -v $FIOTMP/${THIS}_output.json
   if [[ ! $DEBUG -eq 1 ]]; then
   rm -v $FIOTMP/${THIS}.fio
@@ -242,9 +261,17 @@ main () {
 
   # This one eats part of the tree
   #jq -n '[ inputs[] ]' $TMP/*.json  > $TMP/final.json
-  cp merge.js $TMP/
   cd $TMP
   # merge the json files into one
+
+# break WS
+# to close merge js file
+cat << EOF >> $TMP/merge.js
+let data = JSON.stringify(base);
+fs.writeFileSync('${TMP}/final.json', data);
+EOF
+# END break WS
+
   node merge.js
   cd $THIS_CWD
   if [[ $DEBUG -eq 1 ]]; then
