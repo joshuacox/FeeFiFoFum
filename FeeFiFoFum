@@ -1,12 +1,63 @@
 #!/bin/bash
+# Set some defaults
+# If already defined in the environment 
+# then it will retain that value 
+# instead of the default set below
+: ${FIO_OUTPUT_FORMAT:='json'}
 #set -eux
 set -eu
 THIS_CWD=$(pwd)
 TMP=$(mktemp -d)
-#echo "$TMP"
-#trap "rm -rvf $TMP $INIT_TARGET" EXIT
-#trap "rm -rvf $TMP" EXIT
-: ${FIO_OUTPUT_FORMAT:='json'}
+
+cat << EOF > $TMP/csv2json.jq 
+# Taken from https://github.com/stedolan/jq/wiki/Cookbook#convert-a-csv-file-with-headers-to-json
+# COPYING --> https://github.com/stedolan/jq/blob/master/COPYING
+# objectify/1 takes an array of string values as inputs, converts
+# numeric values to numbers, and packages the results into an object
+# with keys specified by the "headers" array
+def objectify(headers):
+  # For jq 1.4, replace the following line by: def tonumberq: .;
+  def tonumberq: tonumber? // .;
+  . as $in
+  | reduce range(0; headers|length) as $i ({}; .[headers[$i]] = ($in[$i] | tonumberq) );
+
+def csv2table:
+  # For jq 1.4, replace the following line by:  def trim: .;
+  def trim: sub("^ +";"") |  sub(" +$";"");
+  split("\n") | map( split(",") | map(trim) );
+
+def csv2json:
+  csv2table
+  | .[0] as $headers
+  | reduce (.[1:][] | select(length > 0) ) as $row
+      ( []; . + [ $row|objectify($headers) ]);
+
+csv2json
+EOF
+
+horizontal_rule () {
+  # make a horizontal rule in the terminal to separate blocks of text
+  printf '%*s\n' "${COLUMNS:-$(tput cols)}" '' | tr ' ' "_"
+}
+
+if [[ $DEBUG -eq 1 ]]; then
+  horizontal_rule
+fi
+
+debug_trapper () {
+  horizontal_rule
+  echo "debugging $TMP"
+}
+
+if [[ $DEBUG -eq 1 ]]; then
+  # We're in debug mode so announce tmp directory now and upon exit
+  echo "$TMP"
+  trap "debug_trapper" EXIT
+else
+  # Otherwise we clean up after ourselves upon exit
+  trap "rm -rvf $TMP" EXIT
+fi
+
 
 rm_target () {
   RM_TARGET=$1
@@ -75,7 +126,9 @@ base_tests () {
   else
     BASE_TARGET=$1
   fi
-  echo "First fire 32 million zeros at $BASE_TARGET"
+  if [[ $DEBUG -eq 1 ]]; then
+    echo "First fire 32 million zeros at $BASE_TARGET"
+  fi
   printf '{\n' 1>>$TMP/base.json 2>>$TMP/base.err 
   # hostname
   printf '  "hostname" : "' 1>>$TMP/base.json
@@ -102,7 +155,15 @@ base_tests () {
   sudo dd if=/dev/zero of=$BASE_TARGET bs=32M count=1 2>$TMP/dd32M.tmp 1>$TMP/dd32M.log
   #cat $TMP/dd32M.tmp $TMP/dd32M.log|grep bytes|sed 's/bytes .* copied,/,/' >>  $TMP/dd32M.csv
   cat $TMP/dd32M.tmp|grep bytes|sed 's/bytes .* copied,/,/' >>  $TMP/dd32M.csv
-  jq -R -s -f csv2json.jq $TMP/dd32M.csv 1>>$TMP/base.json 2>>$TMP/base.err 
+  jq -R -s -f $TMP/csv2json.jq $TMP/dd32M.csv |chomp 1>>$TMP/base.json 2>>$TMP/base.err 
+  printf ',\n' 1>>$TMP/base.json
+  # ip --json a
+  printf '  "ipAddrShow" : ' 1>>$TMP/base.json
+  ip --json addr show 1>>$TMP/base.json 2>>$TMP/base.err
+  printf '\n' 1>>$TMP/base.json
+
+
+  # End base.json
   printf '}\n' 1>>$TMP/base.json 2>>$TMP/base.err 
   rm_target $BASE_TARGET
 }
@@ -141,9 +202,11 @@ fioer () {
   #sender $FIOTMP/${THIS}_output.json
   mv -v $FIOTMP/${THIS}_output.json $TMP/
   #sudo rm -v $FIOTMP/${THIS}_output.json
+  if [[ ! $DEBUG -eq 1 ]]; then
   rm -v $FIOTMP/${THIS}.fio
   #rm -Rfv $FIOTMP
   rmdir -v $FIOTMP
+  fi
 }
 
 main () {
@@ -153,13 +216,21 @@ main () {
   else
     MAIN_TARGET=$1
   fi
-  echo "Initializer"
+  if [[ $DEBUG -eq 1 ]]; then
+    echo "Initializer"
+  fi
   initializer $MAIN_TARGET 1>$TMP/init.log 2>$TMP/init.err 
-  echo "Base Tests"
+  if [[ $DEBUG -eq 1 ]]; then
+    echo "Base Tests"
+  fi
   base_tests $MAIN_TARGET
-  echo "fio reads"
+  if [[ $DEBUG -eq 1 ]]; then
+    echo "fio reads"
+  fi
   fioer fiorandomreadlatency $MAIN_TARGET 1>$TMP/fiorandomreadlatency.log 2>$TMP/fiorandomreadlatency.err 
-  echo "fio rw"
+  if [[ $DEBUG -eq 1 ]]; then
+    echo "fio rw"
+  fi
   fioer fiorandomrwlatency $MAIN_TARGET 1>$TMP/fiorandomrwlatency.log 2>$TMP/fiorandomrwlatency.err 
   rm_target $MAIN_TARGET
 
@@ -170,7 +241,9 @@ main () {
   # merge the json files into one
   node merge.js
   cd $THIS_CWD
-  jq . $TMP/final.json
+  if [[ $DEBUG -eq 1 ]]; then
+    jq . $TMP/final.json
+  fi
 }
 
 looper () {
@@ -204,6 +277,3 @@ done
 }
 
 looper $@
-#cp test*js $TMP/
-echo "$TMP"
-#ls -alh "$TMP"
