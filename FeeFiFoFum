@@ -1,4 +1,12 @@
 #!/bin/bash
+if [ $# -lt 1 ]; then
+  # Print usage
+  echo -n 'Error! wrong number of arguments'
+  echo " [$#]"
+  echo 'usage:'
+  echo "$0 /path/to/testfile"
+  exit 1
+fi
 # Set some defaults
 # If already defined in the environment 
 # then it will retain that value 
@@ -9,8 +17,7 @@ set -eu
 THIS_CWD=$(pwd)
 TMP=$(mktemp -d)
 
-cat << EOF > $TMP/csv2json.jq 
-# Taken from https://github.com/stedolan/jq/wiki/Cookbook#convert-a-csv-file-with-headers-to-json
+echo '# Taken from https://github.com/stedolan/jq/wiki/Cookbook#convert-a-csv-file-with-headers-to-json
 # COPYING --> https://github.com/stedolan/jq/blob/master/COPYING
 # objectify/1 takes an array of string values as inputs, converts
 # numeric values to numbers, and packages the results into an object
@@ -32,8 +39,7 @@ def csv2json:
   | reduce (.[1:][] | select(length > 0) ) as $row
       ( []; . + [ $row|objectify($headers) ]);
 
-csv2json
-EOF
+csv2json' > $TMP/csv2json.jq 
 
 horizontal_rule () {
   # make a horizontal rule in the terminal to separate blocks of text
