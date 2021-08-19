@@ -1,8 +1,9 @@
 #!/bin/bash
 #set -eux
 set -eu
+THIS_CWD=$(pwd)
 TMP=$(mktemp -d)
-echo "$TMP"
+#echo "$TMP"
 #trap "rm -rvf $TMP $INIT_TARGET" EXIT
 #trap "rm -rvf $TMP" EXIT
 : ${FIO_OUTPUT_FORMAT:='json'}
@@ -99,7 +100,8 @@ base_tests () {
   printf '  "dd32M" : ' 1>>$TMP/base.json
   echo 'bytes,time,rate' > $TMP/dd32M.csv
   sudo dd if=/dev/zero of=$BASE_TARGET bs=32M count=1 2>$TMP/dd32M.tmp 1>$TMP/dd32M.log
-  cat $TMP/dd32M.tmp  1>$TMP/dd32M.log|grep bytes|sed 's/bytes .* copied,/,/' >>  $TMP/dd32M.csv
+  #cat $TMP/dd32M.tmp $TMP/dd32M.log|grep bytes|sed 's/bytes .* copied,/,/' >>  $TMP/dd32M.csv
+  cat $TMP/dd32M.tmp|grep bytes|sed 's/bytes .* copied,/,/' >>  $TMP/dd32M.csv
   jq -R -s -f csv2json.jq $TMP/dd32M.csv 1>>$TMP/base.json 2>>$TMP/base.err 
   printf '}\n' 1>>$TMP/base.json 2>>$TMP/base.err 
   rm_target $BASE_TARGET
@@ -160,7 +162,14 @@ main () {
   echo "fio rw"
   fioer fiorandomrwlatency $MAIN_TARGET 1>$TMP/fiorandomrwlatency.log 2>$TMP/fiorandomrwlatency.err 
   rm_target $MAIN_TARGET
-  jq -n '[ inputs[] ]' $TMP/*.json  > $TMP/final.json
+
+  # This one eats part of the tree
+  #jq -n '[ inputs[] ]' $TMP/*.json  > $TMP/final.json
+  cp merge.js $TMP/
+  cd $TMP
+  # merge the json files into one
+  node merge.js
+  cd $THIS_CWD
   jq . $TMP/final.json
 }
 
@@ -195,6 +204,6 @@ done
 }
 
 looper $@
-cp test*js $TMP/
+#cp test*js $TMP/
 echo "$TMP"
 #ls -alh "$TMP"
