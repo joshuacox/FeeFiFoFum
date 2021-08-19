@@ -98,7 +98,8 @@ base_tests () {
   # dd32M
   printf '  "dd32M" : ' 1>>$TMP/base.json
   echo 'bytes,time,rate' > $TMP/dd32M.csv
-  sudo dd if=/dev/zero of=$BASE_TARGET bs=32M count=1 2>&1 |grep bytes|sed 's/bytes .* copied,/,/' >>  $TMP/dd32M.csv
+  sudo dd if=/dev/zero of=$BASE_TARGET bs=32M count=1 2>$TMP/dd32M.tmp 1>$TMP/dd32M.log
+  cat $TMP/dd32M.tmp  1>$TMP/dd32M.log|grep bytes|sed 's/bytes .* copied,/,/' >>  $TMP/dd32M.csv
   jq -R -s -f csv2json.jq $TMP/dd32M.csv 1>>$TMP/base.json 2>>$TMP/base.err 
   printf '}\n' 1>>$TMP/base.json 2>>$TMP/base.err 
   rm_target $BASE_TARGET
