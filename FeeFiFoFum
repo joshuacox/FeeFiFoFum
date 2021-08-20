@@ -12,6 +12,7 @@ fi
 # then it will retain that value 
 # instead of the default set below
 : ${FIO_OUTPUT_FORMAT:='json'}
+: ${DEBUG:=0}
 #set -eux
 set -eu
 THIS_CWD=$(pwd)
@@ -175,6 +176,10 @@ base_tests () {
   # ip --json a
   printf '  "ipAddrShow" : ' 1>>$TMP/base.json
   ip --json addr show 1>>$TMP/base.json 2>>$TMP/base.err
+  printf ',\n' 1>>$TMP/base.json
+  # ip --json route show
+  printf '  "ipRouteShow" : ' 1>>$TMP/base.json
+  ip --json route show 1>>$TMP/base.json 2>>$TMP/base.err
   printf '\n' 1>>$TMP/base.json
 
 
