@@ -313,7 +313,14 @@ for item in "$@" ; do
   elif [[ $item == 'help' || $item == '-h' || $item == '--help' ]]; then
     helper
     exit 1
+  elif [[ $item == '/' ]]; then
+    echo 'Do not target root!'
+    exit 1
+  elif [[ -d $item ]]; then
+    echo "Warning skipping $item because it is a directory, whereas it should be a path to file that has yet to be created in a mount point that needs to be tested"
+    helper
   else
+    shift;
     touch $item
     if [[ $? -eq '0' ]]; then
       rm $item
@@ -321,12 +328,6 @@ for item in "$@" ; do
       echo "Failed cannot create $item"
       exit 1
     fi
-  fi
-  if [[ $item == '/' ]]; then
-    echo 'Do not target root!'
-    exit 1
-  else
-    shift;
     main $item
   fi
 done
