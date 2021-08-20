@@ -1,12 +1,20 @@
 #!/bin/bash
+
+helper () {
+  echo 'Give me a path to a targetfile, that I can create and use to test with.'
+  echo 'This file should not exist, but this should be a path I can write to'
+  echo 'e.g.'
+  echo "$0 /mnt/target/testfile" 
+}
+
 if [ $# -lt 1 ]; then
   # Print usage
   echo -n 'Error! wrong number of arguments'
   echo " [$#]"
-  echo 'usage:'
-  echo "$0 /path/to/testfile"
+  helper
   exit 1
 fi
+
 # Set some defaults
 # If already defined in the environment 
 # then it will retain that value 
@@ -17,6 +25,15 @@ fi
 set -eu
 THIS_CWD=$(pwd)
 TMP=$(mktemp -d)
+
+if [[ $DEBUG -eq 1 ]]; then
+  # We're in debug mode so announce tmp directory now and upon exit
+  echo "$TMP"
+  trap "debug_trapper" EXIT
+else
+  # Otherwise we clean up after ourselves upon exit
+  trap "rm -rvf $TMP" EXIT
+fi
 
 # prep the temp dir
 echo '# Taken from https://github.com/stedolan/jq/wiki/Cookbook#convert-a-csv-file-with-headers-to-json
@@ -65,16 +82,6 @@ debug_trapper () {
   echo "debugging $TMP"
 }
 
-if [[ $DEBUG -eq 1 ]]; then
-  # We're in debug mode so announce tmp directory now and upon exit
-  echo "$TMP"
-  trap "debug_trapper" EXIT
-else
-  # Otherwise we clean up after ourselves upon exit
-  trap "rm -rvf $TMP" EXIT
-fi
-
-
 rm_target () {
   RM_TARGET=$1
   if [[ -f $RM_TARGET ]]; then
@@ -84,23 +91,6 @@ rm_target () {
     exit 1
   fi
 }
-
-helper () {
-  echo 'Give me a path to a targetfile, that I can create and use to test with.'
-  echo 'This file should not exist, but this should be a path I can write to'
-  echo 'e.g.'
-  echo "$0 /mnt/target/testfile" 
-}
-
-if [[ -z $1 ]]; then
-  helper
-fi
-
-if [[ -x "/usr/bin/time" ]]; then
-  TIME=/usr/bin/time
-else
-  TIME=time
-fi
 
 initializer () {
   if [[ -z $1 ]]; then
@@ -215,7 +205,7 @@ fioer () {
   REPLACEME_filename_REPLACEME=${THIS_TARGET} \
   envsubst < tpl/${THIS}.tpl \
     > $FIOTMP/${THIS}.fio
-  $TIME sudo fio \
+  sudo fio \
     --output=$FIOTMP/${THIS}_output.json \
     --output-format=$FIO_OUTPUT_FORMAT \
     $FIOTMP/${THIS}.fio
