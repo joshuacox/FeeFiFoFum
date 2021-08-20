@@ -20,6 +20,7 @@ fi
 # then it will retain that value 
 # instead of the default set below
 : ${FIO_OUTPUT_FORMAT:='json'}
+: ${FEEFIFOFUM_EXTRA_DATA:='null'}
 : ${DEBUG:=0}
 #set -eux
 set -eu
@@ -133,7 +134,7 @@ base_tests () {
     BASE_TARGET=$1
   fi
   if [[ $DEBUG -eq 1 ]]; then
-    echo "First fire 32 million zeros at $BASE_TARGET"
+    echo "First gather data about the host"
   fi
   printf '{\n' 1>>$TMP/base.json 2>>$TMP/base.err 
   # hostname
@@ -156,6 +157,9 @@ base_tests () {
   df_json 1>>$TMP/base.json 2>>$TMP/base.err 
   printf '\n' 1>>$TMP/base.json
   # dd32M
+  if [[ $DEBUG -eq 1 ]]; then
+    echo "Now fire 32 million zeros at $BASE_TARGET"
+  fi
   printf '  "dd32M" : ' 1>>$TMP/base.json
   echo 'bytes,time,rate' > $TMP/dd32M.csv
   sudo dd if=/dev/zero of=$BASE_TARGET bs=32M count=1 2>$TMP/dd32M.tmp 1>$TMP/dd32M.log
@@ -229,6 +233,29 @@ EOF
   fi
 }
 
+extra_data () {
+  THIS=extra_data
+  if [[ $FEEFIFOFUM_EXTRA_DATA == 'null' ]]; then 
+    if [[ $DEBUG -eq 1 ]]; then
+      echo "no extra data"
+    fi
+  else
+    if [[ $DEBUG -eq 1 ]]; then
+      echo "extra data"
+    fi
+    echo $FEEFIFOFUM_EXTRA_DATA > ${TMP}/extra_data.json
+
+# break WS
+# to add lines to merge js
+cat << EOF >> ${TMP}/merge.js
+let ${THIS} = fs.readFileSync('${TMP}/extra_data.json');
+base.${THIS} = JSON.parse(${THIS});
+EOF
+# END break WS
+
+  fi
+}
+
 main () {
   if [[ -z $1 ]]; then
     echo 'no MAIN_TARGET :('
@@ -244,6 +271,7 @@ main () {
     echo "Base Tests"
   fi
   base_tests $MAIN_TARGET
+  extra_data
   if [[ $DEBUG -eq 1 ]]; then
     echo "fio reads"
   fi
