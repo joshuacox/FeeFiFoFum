@@ -1,7 +1,8 @@
 #!/bin/bash
 THIS_CWD=$(pwd)
 TARGET=$1
-TARGET_FILES=$(find $1 -type f)
+#TARGET_FILES=$(find $1 -type f)
+
 TMP=$(mktemp -d)
 echo "SHA256_SUM,BASENAME,FULL_PATH" > $TMP/inv.csv
 recon () {
@@ -16,7 +17,11 @@ recon () {
     echo "$RECON_TARGET is not a file"
   fi
 }
-for i in "$TARGET_FILES"; do recon "$i";done
+#for i in "$TARGET_FILES"; do recon "$i";done
+find /mnt/pool1/nfs-root/files -type f -print0 | while IFS= read -r -d '' file; do
+    #echo "file = $file"
+    recon "$file"
+done
 cat $TMP/inv.csv
 cp $TMP/inv.csv $THIS_CWD/
 rm $TMP/inv.csv
