@@ -6,14 +6,14 @@ TMP=$(mktemp -d)
 echo "SHA256_SUM,BASENAME,FULL_PATH" > $TMP/inv.csv
 recon () {
   RECON_TARGET=$1
-  if [[ -f $RECON_TARGET ]]; then
+  if [[ -f "$RECON_TARGET" ]]; then
     SHA256_SUM=$(sha256sum "$RECON_TARGET"| awk '{print $1}')
     FULL_PATH=$(realpath "$RECON_TARGET")
     BASENAME=$(basename "$RECON_TARGET")
     #echo "$BASENAME,$SHA256_SUM,$FULL_PATH" >> $TMP/inv.csv
     echo "$SHA256_SUM,$BASENAME,$FULL_PATH" >> $TMP/inv.csv
   else
-    echo "$RECON_TARGET not a file"
+    echo "$RECON_TARGET is not a file"
   fi
 }
 for i in $TARGET_FILES; do recon $i;done
