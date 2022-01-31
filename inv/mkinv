@@ -16,7 +16,7 @@ recon () {
     echo "$RECON_TARGET is not a file"
   fi
 }
-for i in $TARGET_FILES; do recon $i;done
+for i in "$TARGET_FILES"; do recon "$i";done
 cat $TMP/inv.csv
 cp $TMP/inv.csv $THIS_CWD/
 rm $TMP/inv.csv
