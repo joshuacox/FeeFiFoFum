@@ -15,7 +15,9 @@ recon () {
     echo "$RECON_TARGET is not a file"
   fi
 }
-find /mnt/pool1/nfs-root/files -type f -print0 | while IFS= read -r -d '' file; do
+
+
+find $TARGET -type f -print0 | while IFS= read -r -d '' file; do
     recon "$file"
 done
 mv -iv $TMP/inv.csv $THIS_CWD/
